@@ -100,7 +100,7 @@ function handlePointerDown(event: PointerEvent) {
     emit('select', props.control.id);
 }
 
-// 修复interact.js初始化逻辑
+// 简化interact.js初始化逻辑
 onMounted(() => {
   if (controlRef.value) {
     const element = controlRef.value;
@@ -138,39 +138,13 @@ function handleDragStart(event: any) {
   isInteracting.value = true;
   const target = event.target;
   
-  // 记录拖拽开始时的坐标
-  const startX = event.clientX;
-  const startY = event.clientY;
+  // 记录初始变换状态
+  const initialTransform = target.style.transform || '';
+  target.setAttribute('data-initial-transform', initialTransform);
   
-  // 获取元素和父容器的位置信息
-  const targetRect = target.getBoundingClientRect();
-  const parentRect = target.parentElement.getBoundingClientRect();
+  console.log('开始拖拽:', props.control.label);
   
-  // 计算鼠标相对于元素的偏移量（鼠标在元素内部的位置）
-  const offsetX = startX - targetRect.left;
-  const offsetY = startY - targetRect.top;
-  
-  // 记录元素相对于父容器的初始位置
-  const initialLeft = targetRect.left - parentRect.left;
-  const initialTop = targetRect.top - parentRect.top;
-  
-  target.setAttribute('data-start-x', startX.toString());
-  target.setAttribute('data-start-y', startY.toString());
-  target.setAttribute('data-offset-x', offsetX.toString());
-  target.setAttribute('data-offset-y', offsetY.toString());
-  target.setAttribute('data-initial-left', initialLeft.toString());
-  target.setAttribute('data-initial-top', initialTop.toString());
-  target.setAttribute('data-initial-transform', target.style.transform || '');
-  
-  console.log('开始拖拽:', props.control.label, {
-    鼠标位置: { x: startX, y: startY },
-    元素位置: { left: targetRect.left, top: targetRect.top, width: targetRect.width, height: targetRect.height },
-    鼠标在元素内偏移: { x: offsetX, y: offsetY },
-    元素相对父容器位置: { left: initialLeft, top: initialTop },
-    父容器尺寸: { width: parentRect.width, height: parentRect.height }
-  });
-  
-  emit('drag-start', event);
+  emit('drag-start', { controlId: props.control.id, event });
 }
 
 function handleDragMove(event: any) {
@@ -193,73 +167,22 @@ function handleDragEnd(event: any) {
     console.log('结束拖拽:', props.control.label);
     const target = event.target;
     
-    // 获取存储的数据
-    const startX = parseFloat(target.getAttribute('data-start-x') || '0');
-    const startY = parseFloat(target.getAttribute('data-start-y') || '0');
-    const offsetX = parseFloat(target.getAttribute('data-offset-x') || '0');
-    const offsetY = parseFloat(target.getAttribute('data-offset-y') || '0');
-    const initialLeft = parseFloat(target.getAttribute('data-initial-left') || '0');
-    const initialTop = parseFloat(target.getAttribute('data-initial-top') || '0');
+    // 获取累积的移动量
+    const dx = parseFloat(target.getAttribute('data-x') || '0');
+    const dy = parseFloat(target.getAttribute('data-y') || '0');
     
-    const endX = event.clientX;
-    const endY = event.clientY;
-    
-    // 计算鼠标的移动量
-    const mouseDx = endX - startX;
-    const mouseDy = endY - startY;
-    
-    // 获取父容器信息
-    const parentRect = target.parentElement.getBoundingClientRect();
-    
-    // 基于鼠标移动量计算元素的新位置
-    const newLeft = initialLeft + mouseDx;
-    const newTop = initialTop + mouseDy;
-    
-    // 获取元素尺寸
-    const computedStyle = getComputedStyle(target);
-    const elementWidth = parseFloat(computedStyle.width);
-    const elementHeight = parseFloat(computedStyle.height);
-    
-    const finalRect = {
-      left: newLeft,
-      top: newTop,
-      right: newLeft + elementWidth,
-      bottom: newTop + elementHeight,
-      width: elementWidth,
-      height: elementHeight
-    };
-    
-    // 验证机制：检查鼠标相对位置是否保持不变（应该为{x: 0, y: 0}）
-    const verification = {
-      x: (endX - parentRect.left) - newLeft - offsetX,
-      y: (endY - parentRect.top) - newTop - offsetY
-    };
-    
-    console.log('拖拽结束，精确计算:', {
-      鼠标开始位置: { x: startX, y: startY },
-      鼠标结束位置: { x: endX, y: endY },
-      鼠标移动量: { dx: mouseDx, dy: mouseDy },
-      鼠标在元素内偏移: { x: offsetX, y: offsetY },
-      元素初始位置: { left: initialLeft, top: initialTop },
-      元素最终位置: { left: newLeft, top: newTop },
-      元素尺寸: { width: elementWidth, height: elementHeight },
-      最终矩形: finalRect,
-      验证鼠标最终相对位置: verification,
-      验证是否精确: Math.abs(verification.x) < 1 && Math.abs(verification.y) < 1 ? '✅ 精确' : '❌ 有误差'
+    // 发送几何更新事件（批量处理）
+    emit('update-geometry', { 
+      id: props.control.id, 
+      dx, 
+      dy, 
+      isDrag: true 
     });
     
-    emit('update-geometry', { id: props.control.id, newRect: finalRect, isDrag: true });
-    
     // 清理临时状态
-    target.style.transform = '';
+    target.style.transform = target.getAttribute('data-initial-transform') || '';
     target.removeAttribute('data-x');
     target.removeAttribute('data-y');
-    target.removeAttribute('data-start-x');
-    target.removeAttribute('data-start-y');
-    target.removeAttribute('data-offset-x');
-    target.removeAttribute('data-offset-y');
-    target.removeAttribute('data-initial-left');
-    target.removeAttribute('data-initial-top');
     target.removeAttribute('data-initial-transform');
     
     emit('drag-end', event);

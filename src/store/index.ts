@@ -32,7 +32,7 @@ export const primarySelectedControl = computed<Control | undefined>(() => {
 });
 
 // 递归查找函数（可以在store或一个工具文件中定义）
-function findControlRecursive(controls: Control[], id: string): Control | null {
+export function findControlRecursive(controls: Control[], id: string): Control | null {
     for (const control of controls) {
         if (control.id === id) return control;
         if (control.controls) {
@@ -41,19 +41,23 @@ function findControlRecursive(controls: Control[], id: string): Control | null {
         }
     }
     return null;
- }
+}
 
 // 清空选择的辅助函数
 export function clearSelection() {
     selectedControlIds.value = [];
 }
-// 通过计算属性获取当前选中的控件对象
+
+// 通过计算属性获取当前选中的控件对象 (兼容性保持)
 export const selectedControl = computed<Control | undefined>(() => {
-    // 注意：这里需要一个更健壮的查找逻辑，因为控件可能在不同的 set 或 group 中
-    // 暂时简化为只在默认 set 中查找
     if (selectedControlIds.value.length === 0) return undefined;
     const firstId = selectedControlIds.value[0];
-    return layout.controlSets[layout.initialSet]?.find(c => c.id === firstId);
+    for (const key in layout.controlSets) {
+        const set = layout.controlSets[key];
+        const found = findControlRecursive(set, firstId);
+        if (found) return found;
+    }
+    return undefined;
 });
 
 
