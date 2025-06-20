@@ -5,6 +5,8 @@ const controlTypes = [
   { type: 'd-pad', label: '方向盘' },
   { type: 'joystick', label: '摇杆' },
   { type: 'slider', label: '滑块' },
+  { type: 'group', label: '控件组' },
+  { type: 'radial', label: '轮盘菜单' },
   // ...未来可以添加更多
 ];
 

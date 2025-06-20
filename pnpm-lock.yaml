@@ -11,6 +11,9 @@ importers:
       interactjs:
         specifier: ^1.10.27
         version: 1.10.27
+      lodash-es:
+        specifier: ^4.17.21
+        version: 4.17.21
       unocss:
         specifier: ^66.2.3
         version: 66.2.3(postcss@8.5.6)(vite@6.3.5(jiti@2.4.2))(vue@3.5.17(typescript@5.8.3))
@@ -664,6 +667,9 @@ packages:
   local-pkg@1.1.1:
     resolution: {integrity: sha512-WunYko2W1NcdfAFpuLUoucsgULmgDBRkdxHxWQ7mK0cQqwPiy8E1enjuRBrhLtZkB5iScJ1XIPdhVEFK8aOLSg==}
     engines: {node: '>=14'}
+
+  lodash-es@4.17.21:
+    resolution: {integrity: sha512-mKnC+QJ9pWVzv+C4/U3rRsHapFfHvQFoFB92e52xeyGMcX6/OlIl78je1u8vePzYZSkkogMPJ2yjxxsb89cxyw==}
 
   magic-string@0.30.17:
     resolution: {integrity: sha512-sNPKHvyjVf7gyjwS4xGTaW/mCnF8wnjtifKBEhxfZ7E/S8tQ0rssrwGNn6q8JH/ohItJfSQp9mBtQYuTlH5QnA==}
@@ -1460,6 +1466,8 @@ snapshots:
       mlly: 1.7.4
       pkg-types: 2.1.0
       quansync: 0.2.10
+
+  lodash-es@4.17.21: {}
 
   magic-string@0.30.17:
     dependencies:

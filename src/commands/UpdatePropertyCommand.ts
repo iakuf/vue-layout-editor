@@ -6,33 +6,68 @@ import type { Control } from '../types';
 
 export class UpdatePropertyCommand implements Command {
   private controlId: string;
-  private propertyKey: keyof Control; // 使用 keyof 确保属性名是合法的
+  private propertyPath: string; // 改为字符串以支持嵌套路径
   private newValue: any;
   private oldValue: any;
 
-  constructor(controlId: string, propertyKey: keyof Control, newValue: any) {
+  constructor(controlId: string, propertyPath: string, newValue: any) {
     this.controlId = controlId;
-    this.propertyKey = propertyKey;
+    this.propertyPath = propertyPath;
     this.newValue = newValue;
 
     // 在构造时就获取旧值
-    const control = layout.controlSets[layout.initialSet]?.find(c => c.id === this.controlId);
+    const control = this.findControl();
     if (control) {
-      this.oldValue = JSON.parse(JSON.stringify(control[propertyKey]));
+      this.oldValue = this.getNestedValue(control, propertyPath);
     }
   }
 
+  private findControl(): Control | null {
+    // 递归查找控件
+    for (const key in layout.controlSets) {
+      const set = layout.controlSets[key];
+      const found = this.findControlRecursive(set, this.controlId);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  private findControlRecursive(controls: Control[], id: string): Control | null {
+    for (const control of controls) {
+      if (control.id === id) return control;
+      if (control.controls) {
+        const found = this.findControlRecursive(control.controls, id);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+
+  private getNestedValue(obj: any, path: string): any {
+    return path.split('.').reduce((current, key) => current?.[key], obj);
+  }
+
+  private setNestedValue(obj: any, path: string, value: any): void {
+    const keys = path.split('.');
+    const lastKey = keys.pop()!;
+    const target = keys.reduce((current, key) => {
+      if (!current[key]) current[key] = {};
+      return current[key];
+    }, obj);
+    target[lastKey] = value;
+  }
+
   public execute(): void {
-    const control = layout.controlSets[layout.initialSet]?.find(c => c.id === this.controlId);
+    const control = this.findControl();
     if (control) {
-      control[this.propertyKey] = this.newValue;
+      this.setNestedValue(control, this.propertyPath, this.newValue);
     }
   }
 
   public undo(): void {
-    const control = layout.controlSets[layout.initialSet]?.find(c => c.id === this.controlId);
+    const control = this.findControl();
     if (control) {
-      control[this.propertyKey] = this.oldValue;
+      this.setNestedValue(control, this.propertyPath, this.oldValue);
     }
   }
 }

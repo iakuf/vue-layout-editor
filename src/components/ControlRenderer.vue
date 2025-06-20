@@ -8,12 +8,16 @@ const props = defineProps<{
   control: Control;
   isSelected: boolean;       // 是否被选中
   isPrimarySelected: boolean; // 是否是主选中对象
+  selectedControlIds?: string[]; // 传递所有选中的控件ID
 }>();
 
 const emit = defineEmits(['select', 'update-geometry', 'drag-start', 'drag-end']);
 
 const controlRef = ref<HTMLElement | null>(null);
 const isInteracting = ref(false);
+
+// 检查子控件是否被选中
+// 组控件相关的函数已移动到 GroupRenderer.vue
 
 const styleObject = computed(() => {
   const style: Record<string, any> = {};
@@ -322,8 +326,14 @@ function handleResizeEnd(event: any) {
 }
 
 onBeforeUnmount(() => {
-  if (controlRef.value && interact.isSet(controlRef.value)) {
-    interact(controlRef.value).unset();
+  try {
+    if (controlRef.value && interact && typeof interact.isSet === 'function') {
+      if (interact.isSet(controlRef.value)) {
+        interact(controlRef.value).unset();
+      }
+    }
+  } catch (error) {
+    console.warn('清理interact.js时出错:', error);
   }
 });
 </script>
@@ -331,21 +341,33 @@ onBeforeUnmount(() => {
 <template>
   <div
     ref="controlRef"
-    class="control-renderer absolute border border-dashed border-blue-400 flex items-center justify-center text-sm select-none"
+    class="control-renderer absolute border border-dashed flex items-center justify-center text-sm select-none"
     :class="{ 
       'ring-2 ring-red-500 ring-inset': isSelected,
       'z-10': isSelected, // 提高选中元素的层级
       'cursor-move': !isSelected,
       'cursor-nw-resize': isSelected,
-      'touch-none': true
+      'touch-none': true,
+      'border-blue-400': props.control.type !== 'radial',
+      'border-green-400 bg-green-50 rounded-full': props.control.type === 'radial'
     }"
     :style="styleObject"
+    :data-id="props.control.id"
     @pointerdown="handlePointerDown"
   >
-  <div v-if="isPrimarySelected" class="resize-handles">
+    <div v-if="isPrimarySelected" class="resize-handles">
         <!-- ... 缩放点的HTML和CSS ... -->
     </div>
-    <span class="pointer-events-none">{{ props.control.label }}</span>
+    
+    <!-- 根据控件类型显示不同的内容 -->
+    <!-- 注意：组控件现在由 GroupRenderer 专门处理，这里不再渲染组控件 -->
+    
+    <div v-if="props.control.type === 'radial'" class="text-center">
+      <div class="font-semibold text-green-700">{{ props.control.style?.centerLabel || props.control.label }}</div>
+      <div class="text-xs text-green-500">{{ props.control.buttons?.length || 0 }} 个按钮</div>
+    </div>
+    
+    <span v-else class="pointer-events-none">{{ props.control.label }}</span>
   </div>
 </template>
 

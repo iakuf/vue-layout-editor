@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, nextTick } from 'vue';
 import ControlRenderer from './ControlRenderer.vue';
 import { layout, selectedControlIds, executeCommand, clearSelection } from '../store';
 import { MoveControlCommand } from '../commands/MoveControlCommand';
 import { AddControlCommand } from '../commands/AddControlCommand';
 import { BatchMoveCommand } from '../commands/BatchMoveCommand';
+import { MoveToGroupCommand } from '../commands/MoveToGroupCommand';
 import { createControl } from '../factories/controlFactory';
 import type { Control } from '../types';
 
@@ -19,6 +20,8 @@ window.addEventListener('keyup', e => { if (e.key === 'Shift') isShiftPressed.va
 // 批量拖拽相关状态
 const isDragging = ref(false);
 const dragStartPositions = new Map<string, any>();
+
+
 
 function handleSelect(controlId: string) {
   if (isShiftPressed.value) {
@@ -53,29 +56,210 @@ function handleDragStart({ controlId }: { controlId: string }) {
   isDragging.value = true;
   dragStartPositions.clear();
   
-  // 如果拖拽的控件不在选中列表中，则只选中这个控件
-  if (!selectedControlIds.value.includes(controlId)) {
+  const draggedControl = findControlInAllLevels(controlId);
+  if (!draggedControl) return;
+  
+  console.log('🚀 拖拽开始分析:', {
+    拖拽控件: draggedControl.label,
+    拖拽控件类型: draggedControl.type,
+    当前选中: selectedControlIds.value,
+    拖拽控件是否被选中: selectedControlIds.value.includes(controlId)
+  });
+  
+  // 如果拖拽的是组控件，确保只移动组控件本身，不包括子控件
+  if (draggedControl.type === 'group') {
+    console.log('📦 拖拽组控件 - 只移动组本身');
     selectedControlIds.value = [controlId];
+  } else {
+    // 如果拖拽的控件不在选中列表中，则只选中这个控件
+    if (!selectedControlIds.value.includes(controlId)) {
+      selectedControlIds.value = [controlId];
+    }
   }
   
   // 记录所有选中控件的初始位置
   selectedControlIds.value.forEach(id => {
-    const control = findControlRecursive(layout.controlSets[layout.initialSet] || [], id);
+    const control = findControlInAllLevels(id);
     if (control) {
       dragStartPositions.set(id, JSON.parse(JSON.stringify(control.position)));
+      console.log(`💾 保存控件 ${control.label} 初始位置:`, control.position);
+    } else {
+      console.warn(`⚠️ 找不到控件 ${id}`);
     }
   });
   
-  console.log('批量拖拽开始，选中控件:', selectedControlIds.value.length, '个');
+  console.log('🎯 拖拽状态设置完成:', {
+    最终选中: selectedControlIds.value,
+    保存的位置数量: dragStartPositions.size
+  });
+}
+
+// 在所有层级中查找控件
+function findControlInAllLevels(id: string): Control | null {
+  for (const key in layout.controlSets) {
+    const found = findControlRecursive(layout.controlSets[key], id);
+    if (found) return found;
+  }
+  return null;
 }
 
 // 处理几何更新（拖拽或缩放）
-function handleGeometryUpdate({ id, dx, dy, newRect, isDrag }: { id: string; dx?: number; dy?: number; newRect?: any; isDrag: boolean }) {
+function handleGeometryUpdate({ id, dx, dy, newRect, isDrag }: { 
+  id: string; 
+  dx?: number; 
+  dy?: number; 
+  newRect?: any; 
+  isDrag: boolean;
+}) {
   if (!canvasRef.value) return;
 
+  console.log('🔄 handleGeometryUpdate 被调用:', {
+    id,
+    isDrag,
+    dx,
+    dy,
+    控件: findControlInAllLevels(id)?.label
+  });
+
   if (isDrag && dx !== undefined && dy !== undefined) {
-    // 批量拖拽处理
-    handleBatchDrag(dx, dy);
+    // 检查是否拖入组内
+    const draggedControl = findControlById(id);
+    if (!draggedControl) return;
+    
+    // 计算拖拽后的新位置
+    const startPosition = dragStartPositions.get(id);
+    if (!startPosition) {
+      console.log(`❌ 没有找到控件 ${id} 的起始位置，尝试使用当前位置`);
+      // 如果没有起始位置，使用控件的当前位置
+      const currentPosition = draggedControl.position;
+      if (currentPosition) {
+        dragStartPositions.set(id, JSON.parse(JSON.stringify(currentPosition)));
+        console.log(`💾 补充保存控件 ${draggedControl.label} 的当前位置:`, currentPosition);
+      } else {
+        console.error(`❌ 控件 ${id} 没有有效的位置信息`);
+        return;
+      }
+    }
+    
+          const canvasRect = canvasRef.value.getBoundingClientRect();
+      // 获取最新的startPosition（可能在上面被补充保存了）
+      const finalStartPosition = dragStartPositions.get(id);
+      if (!finalStartPosition) {
+        console.error(`❌ 仍然无法获取控件 ${id} 的位置信息`);
+        return;
+      }
+      
+      const newPosition = calculateDragPosition(
+        { dx, dy },
+        { width: canvasRect.width, height: canvasRect.height },
+        finalStartPosition
+      );
+    
+    // 根据控件的新位置计算鼠标位置
+    // 假设鼠标位置是控件中心（这是一个合理的近似）
+    let mouseX = 0;
+    let mouseY = 0;
+    
+
+    
+    // 解析新位置来计算鼠标坐标
+    if (newPosition.left) {
+      if (typeof newPosition.left === 'string') {
+        if (newPosition.left.includes('calc')) {
+          const match = newPosition.left.match(/calc\(50% \+ (.+)px\)/);
+          const offset = match ? parseFloat(match[1]) : 0;
+          mouseX = canvasRect.width / 2 + offset;
+        } else if (newPosition.left.includes('%')) {
+          const percent = parseFloat(newPosition.left);
+          mouseX = canvasRect.width * percent / 100;
+        } else {
+          mouseX = parseFloat(newPosition.left);
+        }
+      }
+    } else if (newPosition.right) {
+      // 处理right定位
+      if (typeof newPosition.right === 'string') {
+        const rightValue = parseFloat(newPosition.right);
+        mouseX = canvasRect.width - rightValue;
+      }
+    }
+    
+    if (newPosition.top) {
+      if (typeof newPosition.top === 'string') {
+        if (newPosition.top.includes('calc')) {
+          const match = newPosition.top.match(/calc\(50% \+ (.+)px\)/);
+          const offset = match ? parseFloat(match[1]) : 0;
+          mouseY = canvasRect.height / 2 + offset;
+        } else if (newPosition.top.includes('%')) {
+          const percent = parseFloat(newPosition.top);
+          mouseY = canvasRect.height * percent / 100;
+        } else {
+          mouseY = parseFloat(newPosition.top);
+        }
+      }
+    } else if (newPosition.bottom) {
+      // 处理bottom定位
+      if (typeof newPosition.bottom === 'string') {
+        const bottomValue = parseFloat(newPosition.bottom);
+        mouseY = canvasRect.height - bottomValue;
+      }
+    }
+    
+    console.log('🧮 鼠标位置:', { x: mouseX, y: mouseY });
+    
+    // 使用计算出的鼠标位置检测目标组
+    const targetGroup = detectTargetGroup(mouseX, mouseY, id);
+    
+    console.log('🔍 检测结果:', targetGroup ? `找到目标组: ${targetGroup.label}` : '没有找到目标组');
+    
+    if (targetGroup) {
+      console.log(`🎯 检测到拖入组: ${targetGroup.label}`);
+      
+      // 计算相对于组的位置
+      const groupElem = canvasRef.value.querySelector(`[data-id='${targetGroup.id}']`) as HTMLElement;
+      if (groupElem) {
+        const groupRect = groupElem.getBoundingClientRect();
+        const relativePosition = calculateRelativePosition(newPosition, groupRect, canvasRect);
+        
+        try {
+          // 检查控件是否已经在同一个组内（避免重复添加到同一组）
+          if (targetGroup.controls && targetGroup.controls.find(c => c.id === id)) {
+            console.log(`⚠️ 控件 ${id} 已经在组 ${targetGroup.id} 内，跳过移动`);
+            return;
+          }
+          
+          console.log(`✅ 准备将控件添加到组内`, {
+            控件ID: id,
+            目标组: targetGroup.label,
+            组内现有控件数: targetGroup.controls?.length || 0,
+            组内现有控件: targetGroup.controls?.map(c => c.label) || []
+          });
+          
+          // 使用nextTick确保在下一个tick执行，避免响应式更新冲突
+          nextTick(() => {
+            try {
+              // 执行"移动到组"的命令
+              const command = new MoveToGroupCommand(id, targetGroup.id, relativePosition);
+              executeCommand(command);
+              
+              // 更新选中状态：选中目标组和移入的控件
+              selectedControlIds.value = [targetGroup.id, id];
+              
+              console.log(`✅ 控件 ${draggedControl.label} 已成功移入组 ${targetGroup.label}`);
+            } catch (error) {
+              console.error('移入组失败:', error);
+            }
+          });
+        } catch (error) {
+          console.error('移入组失败:', error);
+          // 如果移入组失败，回退到普通的批量移动
+          handleBatchDrag(dx, dy);
+        }
+      }
+    } else {
+      // 没有拖入组，执行原来的批量拖拽处理
+      handleBatchDrag(dx, dy);
+    }
   } else if (!isDrag && newRect) {
     // 单个控件缩放处理
     handleSingleResize(id, newRect);
@@ -90,7 +274,7 @@ function handleBatchDrag(dx: number, dy: number) {
   const moves: any[] = [];
 
   selectedControlIds.value.forEach(controlId => {
-    const control = findControlRecursive(layout.controlSets[layout.initialSet] || [], controlId);
+    const control = findControlInAllLevels(controlId);
     const startPosition = dragStartPositions.get(controlId);
     
     if (control && startPosition) {
@@ -105,6 +289,13 @@ function handleBatchDrag(dx: number, dy: number) {
         controlId,
         oldPosition: startPosition,
         newPosition
+      });
+      
+      console.log(`📦 准备移动控件 ${control.label}:`, {
+        旧位置: startPosition,
+        新位置: newPosition,
+        是否为组: control.type === 'group',
+        子控件数: control.controls?.length || 0
       });
     }
   });
@@ -122,7 +313,7 @@ function handleBatchDrag(dx: number, dy: number) {
 function handleSingleResize(id: string, newRect: any) {
   if (!canvasRef.value) return;
   
-  const control = findControlRecursive(layout.controlSets[layout.initialSet] || [], id);
+  const control = findControlInAllLevels(id);
   if (!control) return;
 
   const canvasRect = canvasRef.value.getBoundingClientRect();
@@ -374,6 +565,147 @@ function findControlRecursive(controls: Control[], id: string): Control | null {
    return null;
 }
 
+// 根据ID查找控件（使用统一的查找函数）
+function findControlById(id: string): Control | null {
+    return findControlInAllLevels(id);
+}
+
+// 检测是否拖入组内
+function detectTargetGroup(mouseX: number, mouseY: number, draggedControlId: string): Control | null {
+    if (!canvasRef.value) return null;
+    
+    // mouseX和mouseY是相对于画布的坐标，不需要额外转换
+    // 遍历所有组控件，检查是否拖入其中
+    for (const control of activeControls.value) {
+        if (control.type === 'group' && control.id !== draggedControlId) {
+            console.log('🔍 检查组控件:', control.label);
+            
+            const groupElem = canvasRef.value.querySelector(`[data-id='${control.id}']`) as HTMLElement;
+            if (!groupElem) {
+              console.log('❌ 未找到组的DOM元素');
+              continue;
+            }
+            
+            const canvasRect = canvasRef.value.getBoundingClientRect();
+            const groupRect = groupElem.getBoundingClientRect();
+            
+            // 将组的屏幕坐标转换为相对于画布的坐标
+            const groupLeft = groupRect.left - canvasRect.left;
+            const groupTop = groupRect.top - canvasRect.top;
+            const groupRight = groupRect.right - canvasRect.left;
+            const groupBottom = groupRect.bottom - canvasRect.top;
+            
+            console.log('📐 边界检测:', {
+              组边界: { left: groupLeft, top: groupTop, right: groupRight, bottom: groupBottom },
+              鼠标位置: { x: mouseX, y: mouseY },
+              组内子控件数: control.controls?.length || 0
+            });
+            
+            // 扩大检测区域，特别是标题栏区域
+            const titleBarHeight = 30; // 标题栏大约高度
+            const expandedGroupTop = groupTop; // 标题栏从顶部开始
+            const expandedGroupBottom = groupBottom;
+            
+            // 检测是否在组的范围内（包括标题栏）
+            const inGroup = mouseX >= groupLeft && mouseX <= groupRight &&
+                          mouseY >= expandedGroupTop && mouseY <= expandedGroupBottom;
+                          
+            // 额外检测：如果鼠标在标题栏区域，也认为是在组内
+            const inTitleBar = mouseX >= groupLeft && mouseX <= groupRight &&
+                             mouseY >= groupTop && mouseY <= (groupTop + titleBarHeight);
+            
+            const finalResult = inGroup || inTitleBar;
+                          
+            console.log('✅ 碰撞结果:', {
+              基本检测: inGroup ? '在组内' : '不在组内',
+              标题栏检测: inTitleBar ? '在标题栏' : '不在标题栏',
+              最终结果: finalResult ? '命中' : '未命中'
+            });
+            
+            if (finalResult) {
+                console.log(`🎉 找到目标组: ${control.label}`);
+                return control;
+            }
+        }
+    }
+    
+    console.log('❌ 没有找到任何目标组');
+    return null;
+}
+
+// 计算控件相对于组的位置
+function calculateRelativePosition(
+    absolutePosition: any, 
+    groupRect: DOMRect, 
+    canvasRect: DOMRect
+): any {
+    // 将画布坐标转换为相对于组的坐标
+    const groupLeft = groupRect.left - canvasRect.left;
+    const groupTop = groupRect.top - canvasRect.top;
+    
+    // 获取控件在画布上的绝对位置（像素值）
+    let controlLeft = 0;
+    let controlTop = 0;
+    
+    // 解析控件的当前位置
+    if (absolutePosition.left) {
+        if (typeof absolutePosition.left === 'string') {
+            if (absolutePosition.left.includes('calc')) {
+                // 处理 calc(50% + Npx) 格式
+                const match = absolutePosition.left.match(/calc\(50% \+ (.+)px\)/);
+                const offset = match ? parseFloat(match[1]) : 0;
+                controlLeft = canvasRect.width / 2 + offset;
+            } else if (absolutePosition.left.includes('%')) {
+                // 处理百分比
+                const percent = parseFloat(absolutePosition.left);
+                controlLeft = canvasRect.width * percent / 100;
+            } else {
+                // 处理像素值
+                controlLeft = parseFloat(absolutePosition.left);
+            }
+        }
+    }
+    
+    if (absolutePosition.top) {
+        if (typeof absolutePosition.top === 'string') {
+            if (absolutePosition.top.includes('calc')) {
+                // 处理 calc(50% + Npx) 格式
+                const match = absolutePosition.top.match(/calc\(50% \+ (.+)px\)/);
+                const offset = match ? parseFloat(match[1]) : 0;
+                controlTop = canvasRect.height / 2 + offset;
+            } else if (absolutePosition.top.includes('%')) {
+                // 处理百分比
+                const percent = parseFloat(absolutePosition.top);
+                controlTop = canvasRect.height * percent / 100;
+            } else {
+                // 处理像素值
+                controlTop = parseFloat(absolutePosition.top);
+            }
+        }
+    }
+    
+    // 计算相对于组的位置
+    const relativeLeft = controlLeft - groupLeft;
+    const relativeTop = controlTop - groupTop;
+    
+    // 确保位置不为负数
+    const finalLeft = Math.max(0, relativeLeft);
+    const finalTop = Math.max(0, relativeTop);
+    
+    console.log('位置计算详情:', {
+        绝对位置: absolutePosition,
+        控件在画布上的位置: { left: controlLeft, top: controlTop },
+        组在画布上的位置: { left: groupLeft, top: groupTop },
+        相对位置: { left: finalLeft, top: finalTop }
+    });
+    
+    return {
+        anchor: 'top-left',
+        left: `${finalLeft}px`,
+        top: `${finalTop}px`
+    };
+}
+
 // 计算属性：获取当前活动的控件列表
 const activeControls = computed(() => {
     return layout.controlSets[layout.initialSet] || [];
@@ -428,6 +760,7 @@ function handleDrop(event: DragEvent) {
                 :control="control"
                 :is-selected="selectedControlIds.includes(control.id)"
                 :is-primary-selected="selectedControlIds[0] === control.id"
+                :selected-control-ids="selectedControlIds"
                 @select="handleSelect"
                 @drag-start="handleDragStart"
                 @update-geometry="handleGeometryUpdate"

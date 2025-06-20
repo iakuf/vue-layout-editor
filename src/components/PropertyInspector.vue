@@ -2,6 +2,8 @@
 import { computed } from 'vue';
 import { selectedControlIds, primarySelectedControl, executeCommand } from '../store';
 import { UpdatePropertyCommand } from '../commands/UpdatePropertyCommand';
+import GroupConfig from './GroupConfig.vue';
+import RadialConfig from './RadialConfig.vue';
 
 // 该计算属性现在用于显示信息
 const displayControl = computed(() => {
@@ -55,6 +57,13 @@ function handlePropertyChange(propertyPath: string, event: Event) {
                   class="mt-1 block w-full px-2 py-1 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
                 />
             </div>
+
+            <!-- 如果是控件组，则显示其专属配置UI -->
+            <GroupConfig v-if="displayControl.type === 'group'" :control="displayControl" />
+            
+            <!-- 如果是轮盘菜单，则显示其专属配置UI -->
+            <RadialConfig v-if="displayControl.type === 'radial'" :control="displayControl" />
+            
             <!-- ... 其他属性编辑UI ... -->
         </div>
 

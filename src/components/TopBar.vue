@@ -5,6 +5,7 @@ import { AddControlCommand } from '../commands/AddControlCommand';
 import { DeleteControlsCommand } from '../commands/DeleteControlsCommand';
 import { UpdatePropertyCommand } from '../commands/UpdatePropertyCommand';
 import { LoadLayoutCommand } from '../commands/LoadLayoutCommand';
+import { createControl } from '../factories/controlFactory';
 import { v4 as uuidv4 } from 'uuid';
 
 function addTestButton() {
@@ -16,6 +17,18 @@ function addTestButton() {
     size: { width: '120px', height: '60px' },
   };
   const command = new AddControlCommand(newButton);
+  executeCommand(command);
+}
+
+function addTestGroup() {
+  const newGroup = createControl('group', { x: 100, y: 100 });
+  const command = new AddControlCommand(newGroup);
+  executeCommand(command);
+}
+
+function addTestRadial() {
+  const newRadial = createControl('radial', { x: 300, y: 100 });
+  const command = new AddControlCommand(newRadial);
   executeCommand(command);
 }
 
@@ -86,6 +99,8 @@ function exportLayout() {
     <h2 class="text-xl font-bold">虚拟控制器布局编辑器</h2>
     <div class="flex items-center gap-2">
       <button @click="addTestButton" class="px-3 py-1 bg-blue-500 text-white rounded">添加按钮</button>
+      <button @click="addTestGroup" class="px-3 py-1 bg-blue-500 text-white rounded">添加测试组</button>
+      <button @click="addTestRadial" class="px-3 py-1 bg-blue-500 text-white rounded">添加测试径向</button>
       <button @click="deleteSelected" class="px-3 py-1 bg-red-500 text-white rounded">删除选中</button>
       <button @click="changeLabel" class="px-3 py-1 bg-green-500 text-white rounded">修改标签</button>
       <button @click="undo" class="px-3 py-1 bg-gray-500 text-white rounded">撤销 (Undo)</button>
