@@ -394,19 +394,12 @@ function handleResizeUpdate(controlId: string, newRect: any) {
   console.log('🔄 缩放更新:', { controlId, newRect });
 
   try {
-    // 单位转换
-    const { position, size } = convertPositionAndSize({
-      controlId,
-      leftPx: newRect.left,
-      topPx: newRect.top,
-      widthPx: newRect.width,
-      heightPx: newRect.height
-    });
-
-    // 创建并执行缩放命令
+    // 直接传递 px 数值给 ResizeControlCommand，让它内部处理单位转换
     const command = new ResizeControlCommand(controlId, {
-      ...position,
-      ...size
+      left: newRect.left,
+      top: newRect.top,
+      width: newRect.width,
+      height: newRect.height
     });
     executeCommand(command);
     console.log('✅ 缩放命令执行成功');
