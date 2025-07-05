@@ -2,46 +2,87 @@
 import { v4 as uuidv4 } from 'uuid';
 import type { Control, RadialButton } from '../types';
 
-export function createControl(type: Control['type'], dropPosition: { x: number, y: number }): Control {
+export function createControl(
+  type: Control['type'], 
+  dropPosition: { x: number, y: number },
+  options?: {
+    parentType?: 'canvas' | 'group',
+    parentRect?: { width: number, height: number }
+  }
+): Control {
+  const { parentType = 'canvas', parentRect } = options || {};
+
+  // 工具函数：生成vw/vh单位
+  const toVW = (px: number, total: number) => `${(px / total * 100).toFixed(2)}vw`;
+  const toVH = (px: number, total: number) => `${(px / total * 100).toFixed(2)}vh`;
+  // 工具函数：生成百分比单位
+  const toPercent = (px: number, total: number) => `${(px / total * 100).toFixed(2)}%`;
+
+  let position: any;
+  let size: any;
+
+  if (type === 'group' && parentType === 'canvas' && parentRect) {
+    // 顶层控件组，使用vw/vh单位
+    position = {
+      anchor: 'top-left',
+      left: toVW(dropPosition.x, parentRect.width),
+      top: toVH(dropPosition.y, parentRect.height)
+    };
+    size = {
+      width: toVW(200, parentRect.width),
+      height: toVH(150, parentRect.height)
+    };
+  } else if (parentType === 'group' && parentRect) {
+    // group内子控件，使用百分比单位
+    position = {
+      anchor: 'top-left',
+      left: toPercent(dropPosition.x, parentRect.width),
+      top: toPercent(dropPosition.y, parentRect.height)
+    };
+    size = {
+      width: toPercent(80, parentRect.width),
+      height: toPercent(80, parentRect.height)
+    };
+  } else {
+    // 默认像素单位（兜底）
+    position = {
+      anchor: 'top-left',
+      left: `${dropPosition.x}px`,
+      top: `${dropPosition.y}px`
+    };
+    size = {
+      width: '120px',
+      height: '60px',
+    };
+  }
+
   const baseControl: Control = {
     id: uuidv4(),
     type,
     label: type,
-    // 注意：这里的位置是临时的像素值，后续会被转换为响应式Schema
-    position: {
-      anchor: 'top-left', // 初始锚点
-      left: `${dropPosition.x}px`,
-      top: `${dropPosition.y}px`,
-    },
-    size: {
-      width: '120px', // 给予一个默认的初始像素尺寸
-      height: '60px',
-    },
+    position,
+    size,
     style: {},
     mapping: {},
   };
 
   if (type === 'button') {
-    baseControl.size = { width: '80px', height: '80px' };
+    baseControl.size = size;
   }
 
-  // 控件组配置
   if (type === 'group') {
-    baseControl.size = { width: '200px', height: '150px' };
     baseControl.label = '控件组';
-    baseControl.controls = []; // 初始化空的子控件数组
+    baseControl.controls = [];
   }
 
-  // 轮盘菜单配置
   if (type === 'radial') {
-    baseControl.size = { width: '150px', height: '150px' };
     baseControl.label = '轮盘菜单';
+    baseControl.size = size;
     baseControl.style = {
       centerLabel: '菜单',
       centerBackgroundColor: '#4F46E5',
     };
-    // 创建默认的轮盘按钮
-    const defaultButtons: RadialButton[] = [
+    const defaultButtons: any[] = [
       { label: '选项1', angle: 0 },
       { label: '选项2', angle: 90 },
       { label: '选项3', angle: 180 },
@@ -49,9 +90,6 @@ export function createControl(type: Control['type'], dropPosition: { x: number, 
     ];
     baseControl.buttons = defaultButtons;
   }
-
-  // 可以为其他控件类型设置不同的默认值
-  // if (type === 'd-pad') { ... }
 
   return baseControl;
 }

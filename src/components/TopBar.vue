@@ -7,6 +7,7 @@ import { UpdatePropertyCommand } from '../commands/UpdatePropertyCommand';
 import { LoadLayoutCommand } from '../commands/LoadLayoutCommand';
 import { createControl } from '../factories/controlFactory';
 import { v4 as uuidv4 } from 'uuid';
+import { convertLayoutToResponsiveUnits, convertLayoutToPxUnits } from '../utils/positionUnitConverter';
 
 function addTestButton() {
   const newButton = {
@@ -68,7 +69,15 @@ function handleFileImport(event: Event) {
   reader.onload = (e) => {
     try {
       const content = e.target?.result as string;
-      const newLayout = JSON.parse(content);
+      let newLayout = JSON.parse(content);
+      // 获取画布DOMRect
+      const canvasElem = document.getElementById('layout-canvas');
+      let canvasRect: DOMRect = { width: 812, height: 375, left: 0, top: 0, right: 0, bottom: 0 } as DOMRect;
+      if (canvasElem) {
+        canvasRect = canvasElem.getBoundingClientRect();
+      }
+      // 单位反转换，全部转为px
+      newLayout = convertLayoutToPxUnits(newLayout, canvasRect);
       const command = new LoadLayoutCommand(newLayout);
       executeCommand(command);
     } catch (error) {
@@ -81,7 +90,16 @@ function handleFileImport(event: Event) {
 }
 
 function exportLayout() {
-  const jsonString = JSON.stringify(layout, null, 2);
+  // 获取画布DOMRect
+  const canvasElem = document.getElementById('layout-canvas');
+  let canvasRect: DOMRect = { width: 812, height: 375, left: 0, top: 0, right: 0, bottom: 0 } as DOMRect;
+  if (canvasElem) {
+    canvasRect = canvasElem.getBoundingClientRect();
+  }
+  // 单位转换兜底
+  const responsiveLayout = convertLayoutToResponsiveUnits(layout, canvasRect);
+  console.log('导出前的responsiveLayout:', responsiveLayout);
+  const jsonString = JSON.stringify(responsiveLayout, null, 2);
   const blob = new Blob([jsonString], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');

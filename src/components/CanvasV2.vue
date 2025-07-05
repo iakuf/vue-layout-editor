@@ -1,6 +1,7 @@
 <template>
   <div class="flex-grow p-5 flex justify-center items-center bg-gray-200">
     <div 
+      id="layout-canvas"
       class="w-[812px] h-[375px] bg-white shadow-lg relative overflow-hidden" 
       ref="canvasRef"
       @pointerdown.self="handleCanvasClick"
@@ -37,6 +38,7 @@ import { MoveToGroupCommand } from '../commands/MoveToGroupCommand';
 import { ResizeControlCommand } from '../commands/ResizeControlCommand';
 import GroupRenderer from './GroupRenderer.vue';
 import ControlRenderer from './ControlRenderer.vue';
+import { pxToVW, pxToVH, pxToPercent } from '../utils/positionUnitConverter';
 
 const canvasRef = ref<HTMLElement>();
 
@@ -57,9 +59,28 @@ function handleCanvasClick() {
   selectedControlIds.value = [];
 }
 
+// 工具函数：获取控件层级和类型信息
+function getControlLevelInfo(controlId: string) {
+  const location = ControlTreeManager.findControl(controlId);
+  if (!location) return { isTopGroup: false, isGroupChild: false, parent: null, level: -1, control: null };
+
+  const isTopGroup = location.parent === null && location.control.type === 'group';
+  const isGroupChild = location.parent && location.parent.type === 'group';
+
+  return {
+    isTopGroup,
+    isGroupChild,
+    parent: location.parent,
+    level: location.level,
+    control: location.control
+  };
+}
+
 // 处理拖拽开始
 function handleDragStart({ controlId }: { controlId: string }) {
   console.log('🚀 拖拽开始处理:', controlId);
+  const info = getControlLevelInfo(controlId);
+  console.log('控件层级信息:', info);
   
   const session = DragStateManager.startDragSession(controlId, selectedControlIds.value);
   if (!session) {
@@ -269,51 +290,124 @@ function handleMoveToGroup(controlId: string, dropTarget: any) {
   });
 }
 
-// 处理普通拖拽
+// 辅助函数：根据控件类型和父容器，转换position/size单位
+function convertPositionAndSize({
+  controlId,
+  leftPx,
+  topPx,
+  widthPx,
+  heightPx
+}: {
+  controlId: string,
+  leftPx: number,
+  topPx: number,
+  widthPx: number,
+  heightPx: number
+}) {
+  const info = getControlLevelInfo(controlId);
+  let position: any = { anchor: 'top-left' };
+  let size: any = {};
+
+  if (info.isTopGroup && canvasRef.value) {
+    // group顶层控件，vw/vh
+    const canvasRect = canvasRef.value.getBoundingClientRect();
+    position.left = pxToVW(leftPx, canvasRect.width);
+    position.top = pxToVH(topPx, canvasRect.height);
+    size.width = pxToVW(widthPx, canvasRect.width);
+    size.height = pxToVH(heightPx, canvasRect.height);
+  } else if (info.isGroupChild && info.parent) {
+    // group内子控件，%
+    // 需要父group的尺寸
+    const groupElem = document.querySelector(`[data-id='${info.parent.id}']`) as HTMLElement;
+    if (groupElem) {
+      const groupRect = groupElem.getBoundingClientRect();
+      position.left = pxToPercent(leftPx, groupRect.width);
+      position.top = pxToPercent(topPx, groupRect.height);
+      size.width = pxToPercent(widthPx, groupRect.width);
+      size.height = pxToPercent(heightPx, groupRect.height);
+    } else {
+      // 兜底用px
+      position.left = `${leftPx}px`;
+      position.top = `${topPx}px`;
+      size.width = `${widthPx}px`;
+      size.height = `${heightPx}px`;
+    }
+  } else {
+    // 兜底用px
+    position.left = `${leftPx}px`;
+    position.top = `${topPx}px`;
+    size.width = `${widthPx}px`;
+    size.height = `${heightPx}px`;
+  }
+  return { position, size };
+}
+
+// 修改handleNormalDrag，写入layout前做单位转换
 function handleNormalDrag(dx: number, dy: number) {
   const session = DragStateManager.getCurrentSession();
   if (!session || !canvasRef.value) return;
-  
+
   const canvasRect = canvasRef.value.getBoundingClientRect();
   const moves: any[] = [];
-  
+
   session.selectedControlIds.forEach(controlId => {
     const location = ControlTreeManager.findControl(controlId);
     const startPosition = session.startPositions.get(controlId);
-    
+
     if (location && startPosition) {
-      const newPosition = calculateNewPosition(dx, dy, startPosition, canvasRect);
-      
+      // 先用px计算新位置
+      let leftPx = 0, topPx = 0, widthPx = 120, heightPx = 60;
+      if (startPosition.left && typeof startPosition.left === 'string') leftPx = parseFloat(startPosition.left) + dx;
+      if (startPosition.top && typeof startPosition.top === 'string') topPx = parseFloat(startPosition.top) + dy;
+      if (location.control.size && typeof location.control.size.width === 'string') widthPx = parseFloat(location.control.size.width);
+      if (location.control.size && typeof location.control.size.height === 'string') heightPx = parseFloat(location.control.size.height);
+
+      // 单位转换
+      const { position, size } = convertPositionAndSize({
+        controlId,
+        leftPx,
+        topPx,
+        widthPx,
+        heightPx
+      });
+
       moves.push({
         controlId,
         oldPosition: startPosition,
-        newPosition
+        newPosition: position,
+        newSize: size
       });
     }
   });
-  
+
   if (moves.length > 0) {
     const command = new BatchMoveCommand(moves);
     executeCommand(command);
   }
-  
+
   // 结束拖拽会话
   DragStateManager.endDragSession();
 }
 
-// 处理缩放更新
+// 修改handleResizeUpdate，写入layout前做单位转换
 function handleResizeUpdate(controlId: string, newRect: any) {
   console.log('🔄 缩放更新:', { controlId, newRect });
-  
+
   try {
+    // 单位转换
+    const { position, size } = convertPositionAndSize({
+      controlId,
+      leftPx: newRect.left,
+      topPx: newRect.top,
+      widthPx: newRect.width,
+      heightPx: newRect.height
+    });
+
     // 创建并执行缩放命令
     const command = new ResizeControlCommand(controlId, {
-      left: newRect.left,
-      top: newRect.top,
-      width: newRect.width,
-      height: newRect.height
+      ...position,
+      ...size
     });
-    
     executeCommand(command);
     console.log('✅ 缩放命令执行成功');
   } catch (error) {
@@ -342,8 +436,23 @@ function handleDrop(event: DragEvent) {
   const dropX = event.clientX - canvasRect.left;
   const dropY = event.clientY - canvasRect.top;
 
-  // 使用工厂函数创建新的控件对象
-  const newControl = createControl(data.type, { x: dropX, y: dropY });
+  // 判断是否为group类型
+  let parentType: 'canvas' | 'group' = 'canvas';
+  let parentRect = canvasRect;
+
+  // 这里可以扩展：如果支持拖到group内部，需要获取group的rect
+  // 目前默认都在画布上拖放
+
+  // 使用工厂函数创建新的控件对象，传递parentType和parentRect
+  const newControl = createControl(data.type, { x: dropX, y: dropY }, { parentType, parentRect });
+
+  // 判断新控件类型
+  const isGroup = newControl.type === 'group';
+  if (isGroup) {
+    console.log('新增的是顶层控件组，已使用vw/vh单位');
+  } else {
+    console.log('新增的是普通控件，已使用%单位（如有group父容器）或px单位（兜底）');
+  }
 
   // 创建并执行AddControlCommand
   const command = new AddControlCommand(newControl);
