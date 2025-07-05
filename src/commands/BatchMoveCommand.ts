@@ -6,6 +6,7 @@ interface MoveInfo {
   controlId: string;
   oldPosition: any;
   newPosition: any;
+  newSize?: any; // 可选的尺寸更新
 }
 
 // 辅助函数，用于在复杂的层级结构中递归查找控件
@@ -37,10 +38,13 @@ export class BatchMoveCommand implements Command {
   }
 
   public execute(): void {
-    this.moves.forEach(({ controlId, newPosition }) => {
+    this.moves.forEach(({ controlId, newPosition, newSize }) => {
       const control = findControlById(controlId);
       if (control) {
         control.position = newPosition;
+        if (newSize) {
+          control.size = newSize;
+        }
       }
     });
   }

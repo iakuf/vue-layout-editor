@@ -1,7 +1,7 @@
 import { type Command } from './Command';
 import { layout } from '../store';
 import type { Control } from '../types';
-import { pxToVW, pxToVH, pxToPercent } from '../utils/positionUnitConverter';
+// 编辑器内部统一使用 px 单位，只在导入导出时转换
 
 export class ResizeControlCommand implements Command {
   private controlId: string;
@@ -42,72 +42,18 @@ export class ResizeControlCommand implements Command {
     return null;
   }
 
-  // 获取控件层级信息
-  private getControlLevelInfo(controlId: string) {
-    // 递归查找控件及其父级
-    for (const key in layout.controlSets) {
-      const set = layout.controlSets[key];
-      const result = this.findControlWithParent(set, controlId);
-      if (result) {
-        const { control, parent } = result;
-        return {
-          control,
-          parent,
-          isTopGroup: control.type === 'group' && !parent,
-          isGroupChild: parent && parent.type === 'group'
-        };
-      }
-    }
-    return null;
-  }
 
-  private findControlWithParent(controls: Control[], id: string, parent: Control | null = null): { control: Control, parent: Control | null } | null {
-    for (const control of controls) {
-      if (control.id === id) {
-        return { control, parent };
-      }
-      if (control.controls) {
-        const found = this.findControlWithParent(control.controls, id, control);
-        if (found) return found;
-      }
-    }
-    return null;
-  }
 
-  // 根据控件层级转换单位
+  // 编辑器内部统一使用 px 单位
   private convertPositionAndSize() {
-    const info = this.getControlLevelInfo(this.controlId);
     let position: any = { anchor: 'top-left' };
     let size: any = {};
 
-    if (info?.isTopGroup) {
-      // group顶层控件，vw/vh
-      const canvasWidth = 812; // 画布宽度
-      const canvasHeight = 375; // 画布高度
-      position.left = pxToVW(this.newRect.left, canvasWidth);
-      position.top = pxToVH(this.newRect.top, canvasHeight);
-      size.width = pxToVW(this.newRect.width, canvasWidth);
-      size.height = pxToVH(this.newRect.height, canvasHeight);
-    } else if (info?.isGroupChild && info.parent) {
-      // group内子控件，%
-      // 需要父group的尺寸
-      const parentSize = info.parent.size;
-      const parentWidth = typeof parentSize.width === 'string' ? parseFloat(parentSize.width) : 100;
-      const parentHeight = typeof parentSize.height === 'string' ? parseFloat(parentSize.height) : 100;
-      
-      position.left = pxToPercent(this.newRect.left, parentWidth);
-      position.top = pxToPercent(this.newRect.top, parentHeight);
-      size.width = pxToPercent(this.newRect.width, parentWidth);
-      size.height = pxToPercent(this.newRect.height, parentHeight);
-    } else {
-      // 普通控件，用 vw/vh
-      const canvasWidth = 812;
-      const canvasHeight = 375;
-      position.left = pxToVW(this.newRect.left, canvasWidth);
-      position.top = pxToVH(this.newRect.top, canvasHeight);
-      size.width = pxToVW(this.newRect.width, canvasWidth);
-      size.height = pxToVH(this.newRect.height, canvasHeight);
-    }
+    // 统一使用 px 单位
+    position.left = `${this.newRect.left}px`;
+    position.top = `${this.newRect.top}px`;
+    size.width = `${this.newRect.width}px`;
+    size.height = `${this.newRect.height}px`;
     
     return { position, size };
   }
@@ -139,11 +85,11 @@ export class ResizeControlCommand implements Command {
       // 对于 right 定位，需要计算 right 值
       const canvasWidth = 812;
       const rightPx = canvasWidth - this.newRect.left - this.newRect.width;
-      control.position.right = pxToVW(rightPx, canvasWidth);
+      control.position.right = `${rightPx}px`;
     } else if (anchorX === 'center') {
       const canvasWidth = 812;
       const centerOffset = this.newRect.left + this.newRect.width / 2 - canvasWidth / 2;
-      control.position.left = centerOffset === 0 ? '50%' : `calc(50% + ${pxToVW(centerOffset, canvasWidth)})`;
+      control.position.left = centerOffset === 0 ? '50%' : `calc(50% + ${centerOffset}px)`;
     }
 
     // 更新垂直位置
@@ -153,11 +99,11 @@ export class ResizeControlCommand implements Command {
       // 对于 bottom 定位，需要计算 bottom 值
       const canvasHeight = 375;
       const bottomPx = canvasHeight - this.newRect.top - this.newRect.height;
-      control.position.bottom = pxToVH(bottomPx, canvasHeight);
+      control.position.bottom = `${bottomPx}px`;
     } else if (anchorY === 'middle') {
       const canvasHeight = 375;
       const centerOffset = this.newRect.top + this.newRect.height / 2 - canvasHeight / 2;
-      control.position.top = centerOffset === 0 ? '50%' : `calc(50% + ${pxToVH(centerOffset, canvasHeight)})`;
+      control.position.top = centerOffset === 0 ? '50%' : `calc(50% + ${centerOffset}px)`;
     }
 
     // 更新尺寸

@@ -22,13 +22,23 @@ function addTestButton() {
 }
 
 function addTestGroup() {
-  const newGroup = createControl('group', { x: 100, y: 100 });
+  // 获取画布尺寸用于单位转换
+  const canvasRect = { width: 812, height: 375 };
+  const newGroup = createControl('group', { x: 100, y: 100 }, { 
+    parentType: 'canvas', 
+    parentRect: canvasRect 
+  });
   const command = new AddControlCommand(newGroup);
   executeCommand(command);
 }
 
 function addTestRadial() {
-  const newRadial = createControl('radial', { x: 300, y: 100 });
+  // 获取画布尺寸用于单位转换
+  const canvasRect = { width: 812, height: 375 };
+  const newRadial = createControl('radial', { x: 300, y: 100 }, { 
+    parentType: 'canvas', 
+    parentRect: canvasRect 
+  });
   const command = new AddControlCommand(newRadial);
   executeCommand(command);
 }

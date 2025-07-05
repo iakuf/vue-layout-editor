@@ -10,46 +10,29 @@ export function createControl(
     parentRect?: { width: number, height: number }
   }
 ): Control {
-  const { parentType = 'canvas', parentRect } = options || {};
-
-  // 工具函数：生成vw/vh单位
-  const toVW = (px: number, total: number) => `${(px / total * 100).toFixed(2)}vw`;
-  const toVH = (px: number, total: number) => `${(px / total * 100).toFixed(2)}vh`;
-  // 工具函数：生成百分比单位
-  const toPercent = (px: number, total: number) => `${(px / total * 100).toFixed(2)}%`;
+  // 编辑器内部统一使用 px 单位，导出时再转换为响应式单位
 
   let position: any;
   let size: any;
 
-  if (type === 'group' && parentType === 'canvas' && parentRect) {
-    // 顶层控件组，使用vw/vh单位
-    position = {
-      anchor: 'top-left',
-      left: toVW(dropPosition.x, parentRect.width),
-      top: toVH(dropPosition.y, parentRect.height)
-    };
+  // 编辑器内部统一使用 px 单位，导出时再转换为响应式单位
+  position = {
+    anchor: 'top-left',
+    left: `${dropPosition.x}px`,
+    top: `${dropPosition.y}px`
+  };
+  
+  if (type === 'group') {
     size = {
-      width: toVW(200, parentRect.width),
-      height: toVH(150, parentRect.height)
+      width: '200px',
+      height: '150px'
     };
-  } else if (parentType === 'group' && parentRect) {
-    // group内子控件，使用百分比单位
-    position = {
-      anchor: 'top-left',
-      left: toPercent(dropPosition.x, parentRect.width),
-      top: toPercent(dropPosition.y, parentRect.height)
-    };
+  } else if (type === 'radial') {
     size = {
-      width: toPercent(80, parentRect.width),
-      height: toPercent(80, parentRect.height)
+      width: '120px',
+      height: '120px'
     };
   } else {
-    // 默认像素单位（兜底）
-    position = {
-      anchor: 'top-left',
-      left: `${dropPosition.x}px`,
-      top: `${dropPosition.y}px`
-    };
     size = {
       width: '120px',
       height: '60px',

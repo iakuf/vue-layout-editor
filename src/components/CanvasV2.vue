@@ -38,7 +38,7 @@ import { MoveToGroupCommand } from '../commands/MoveToGroupCommand';
 import { ResizeControlCommand } from '../commands/ResizeControlCommand';
 import GroupRenderer from './GroupRenderer.vue';
 import ControlRenderer from './ControlRenderer.vue';
-import { pxToVW, pxToVH, pxToPercent } from '../utils/positionUnitConverter';
+// 编辑器内部统一使用 px 单位，只在导入导出时转换
 
 const canvasRef = ref<HTMLElement>();
 
@@ -290,64 +290,13 @@ function handleMoveToGroup(controlId: string, dropTarget: any) {
   });
 }
 
-// 辅助函数：根据控件类型和父容器，转换position/size单位
-function convertPositionAndSize({
-  controlId,
-  leftPx,
-  topPx,
-  widthPx,
-  heightPx
-}: {
-  controlId: string,
-  leftPx: number,
-  topPx: number,
-  widthPx: number,
-  heightPx: number
-}) {
-  const info = getControlLevelInfo(controlId);
-  let position: any = { anchor: 'top-left' };
-  let size: any = {};
 
-  if (info.isTopGroup && canvasRef.value) {
-    // group顶层控件，vw/vh
-    const canvasRect = canvasRef.value.getBoundingClientRect();
-    position.left = pxToVW(leftPx, canvasRect.width);
-    position.top = pxToVH(topPx, canvasRect.height);
-    size.width = pxToVW(widthPx, canvasRect.width);
-    size.height = pxToVH(heightPx, canvasRect.height);
-  } else if (info.isGroupChild && info.parent) {
-    // group内子控件，%
-    // 需要父group的尺寸
-    const groupElem = document.querySelector(`[data-id='${info.parent.id}']`) as HTMLElement;
-    if (groupElem) {
-      const groupRect = groupElem.getBoundingClientRect();
-      position.left = pxToPercent(leftPx, groupRect.width);
-      position.top = pxToPercent(topPx, groupRect.height);
-      size.width = pxToPercent(widthPx, groupRect.width);
-      size.height = pxToPercent(heightPx, groupRect.height);
-    } else {
-      // 兜底用px
-      position.left = `${leftPx}px`;
-      position.top = `${topPx}px`;
-      size.width = `${widthPx}px`;
-      size.height = `${heightPx}px`;
-    }
-  } else {
-    // 兜底用px
-    position.left = `${leftPx}px`;
-    position.top = `${topPx}px`;
-    size.width = `${widthPx}px`;
-    size.height = `${heightPx}px`;
-  }
-  return { position, size };
-}
 
-// 修改handleNormalDrag，写入layout前做单位转换
+// 修改handleNormalDrag，编辑器内部统一使用px单位
 function handleNormalDrag(dx: number, dy: number) {
   const session = DragStateManager.getCurrentSession();
   if (!session || !canvasRef.value) return;
 
-  const canvasRect = canvasRef.value.getBoundingClientRect();
   const moves: any[] = [];
 
   session.selectedControlIds.forEach(controlId => {
@@ -355,27 +304,29 @@ function handleNormalDrag(dx: number, dy: number) {
     const startPosition = session.startPositions.get(controlId);
 
     if (location && startPosition) {
-      // 先用px计算新位置
-      let leftPx = 0, topPx = 0, widthPx = 120, heightPx = 60;
-      if (startPosition.left && typeof startPosition.left === 'string') leftPx = parseFloat(startPosition.left) + dx;
-      if (startPosition.top && typeof startPosition.top === 'string') topPx = parseFloat(startPosition.top) + dy;
-      if (location.control.size && typeof location.control.size.width === 'string') widthPx = parseFloat(location.control.size.width);
-      if (location.control.size && typeof location.control.size.height === 'string') heightPx = parseFloat(location.control.size.height);
+      // 计算新位置（保持px单位）
+      let newLeft = startPosition.left;
+      let newTop = startPosition.top;
+      
+      if (startPosition.left && typeof startPosition.left === 'string') {
+        const currentLeft = parseFloat(startPosition.left);
+        newLeft = `${currentLeft + dx}px`;
+      }
+      if (startPosition.top && typeof startPosition.top === 'string') {
+        const currentTop = parseFloat(startPosition.top);
+        newTop = `${currentTop + dy}px`;
+      }
 
-      // 单位转换
-      const { position, size } = convertPositionAndSize({
-        controlId,
-        leftPx,
-        topPx,
-        widthPx,
-        heightPx
-      });
+      const newPosition = {
+        ...startPosition,
+        left: newLeft,
+        top: newTop
+      };
 
       moves.push({
         controlId,
         oldPosition: startPosition,
-        newPosition: position,
-        newSize: size
+        newPosition: newPosition
       });
     }
   });

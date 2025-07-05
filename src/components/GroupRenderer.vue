@@ -324,32 +324,26 @@ function handleResizeStart(event: any) {
 
 function handleResizeMove(event: any) {
   const target = event.target;
-  let x = parseFloat(target.getAttribute('data-x')) || 0;
-  let y = parseFloat(target.getAttribute('data-y')) || 0;
-
-  // 处理从顶部或左侧边缘缩放时的位移
-  x += event.deltaRect.left;
-  y += event.deltaRect.top;
-
-  // 直接设置大小和位置
+  
+  // 直接设置大小和位置，让 interact.js 完全控制
   target.style.width = event.rect.width + 'px';
   target.style.height = event.rect.height + 'px';
   
-  // 如果有位移，应用translate变换
-  if (x !== 0 || y !== 0) {
-    target.style.transform = `translate(${x}px, ${y}px)`;
-  } else {
-    target.style.transform = '';
-  }
-
-  target.setAttribute('data-x', x);
-  target.setAttribute('data-y', y);
+  // 清除任何变换
+  target.style.transform = '';
+  
+  // 实时更新位置，无论是否临时定位
+  const parentRect = target.parentElement.getBoundingClientRect();
+  const left = event.rect.left - parentRect.left;
+  const top = event.rect.top - parentRect.top;
+  target.style.left = `${left}px`;
+  target.style.top = `${top}px`;
   
   console.log('📐 interact.js 组控件缩放中:', { 
     width: event.rect.width, 
     height: event.rect.height,
-    deltaX: x,
-    deltaY: y 
+    deltaRect: event.deltaRect,
+    当前位置: { left: target.style.left, top: target.style.top }
   });
 }
 
@@ -357,21 +351,42 @@ function handleResizeEnd(event: any) {
   console.log('📐 interact.js 组控件结束缩放:', props.control.label);
   const target = event.target;
   
+
+  
   // 使用interact.js提供的rect信息
   const interactRect = event.rect;
   const parentRect = target.parentElement.getBoundingClientRect();
   
   // 计算相对于父容器的位置和尺寸
+  let left, top;
+  if (target.getAttribute('data-temp-positioning') === 'true') {
+    // 如果使用了临时定位，直接使用 interact.js 的 rect
+    // 因为临时定位时，interact.js 已经考虑了所有位移
+    left = interactRect.left - parentRect.left;
+    top = interactRect.top - parentRect.top;
+  } else {
+    // 正常情况，使用 interact.js 的 rect
+    left = interactRect.left - parentRect.left;
+    top = interactRect.top - parentRect.top;
+  }
+  
   const relativeRect = {
-    left: interactRect.left - parentRect.left,
-    top: interactRect.top - parentRect.top,
-    right: interactRect.right - parentRect.left,
-    bottom: interactRect.bottom - parentRect.top,
+    left,
+    top,
+    right: left + interactRect.width,
+    bottom: top + interactRect.height,
     width: interactRect.width,
     height: interactRect.height
   };
 
-  console.log('📐 组控件缩放完成，新尺寸:', relativeRect);
+  console.log('📐 组控件缩放完成，详细信息:', {
+    原始interactRect: interactRect,
+    父容器rect: parentRect,
+    使用了临时定位: target.getAttribute('data-temp-positioning') === 'true',
+    临时定位样式: { left: target.style.left, top: target.style.top },
+    计算的最终位置: { left, top },
+    最终relativeRect: relativeRect
+  });
 
   emit('update-geometry', { 
     id: props.control.id, 
@@ -379,21 +394,15 @@ function handleResizeEnd(event: any) {
     isDrag: false 
   });
 
-  // 清理临时状态
-  target.style.transform = '';
-  target.style.width = '';
-  target.style.height = '';
-  
-  // 如果使用了临时定位，清理相关属性
-  if (target.getAttribute('data-temp-positioning') === 'true') {
-    target.style.left = '';
-    target.style.top = '';
-    target.removeAttribute('data-temp-positioning');
-  }
-  
+  // 清理临时状态，但不清空样式，让 Vue 响应式系统接管
   target.removeAttribute('data-x');
   target.removeAttribute('data-y');
   target.removeAttribute('data-initial-transform');
+  
+  // 如果使用了临时定位，清理相关属性
+  if (target.getAttribute('data-temp-positioning') === 'true') {
+    target.removeAttribute('data-temp-positioning');
+  }
   
   isInteracting.value = false;
 }
