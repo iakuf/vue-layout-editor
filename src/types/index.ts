@@ -16,14 +16,14 @@ export interface Control {
     id: string;
     type: 'button' | 'd-pad' | 'joystick' | 'group' | 'radial' | 'slider';
     label: string;
-    position: any; // 暂时使用 any，后续会定义更具体的类型
-    size: any;     // 暂时使用 any
-    style?: Record<string, any>; // 改为any以支持更复杂的样式对象
+    position: Position;
+    size: Size;
+    style?: Record<string, any>;
     mapping?: any;
     action?: any;
     cooldown?: number;
     controls?: Control[]; // 仅用于 'group' 类型
-    buttons?: RadialButton[]; // 仅用于 'radial' 类型
+    buttons?: any[];      // 仅用于 'radial' 类型
 }
 
 /**
@@ -36,5 +36,25 @@ export interface Layout {
   inherits?: string;
   initialSet: string;
   controlSets: Record<string, Control[]>;
+}
+
+export interface SafeAreaValue {
+  preferred: string;
+  min?: string;
+  max?: string;
+}
+
+export interface Position {
+  anchor: string;
+  left?: string | SafeAreaValue;
+  right?: string | SafeAreaValue;
+  top?: string | SafeAreaValue;
+  bottom?: string | SafeAreaValue;
+}
+
+export interface Size {
+  width?: string | SafeAreaValue;
+  height?: string | SafeAreaValue;
+  aspectRatio?: string;
 }
   
