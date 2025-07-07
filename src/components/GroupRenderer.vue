@@ -31,6 +31,7 @@
       <div 
         class="group-content-area absolute inset-0 pt-8 z-5"
         @dragover="handleDragOver"
+        @dragleave="handleDragLeave"
         @drop="handleDrop"
       >
         <!-- 空状态提示 -->
@@ -106,6 +107,7 @@ interface Emits {
   (e: 'select', id: string): void;
   (e: 'drag-start', data: { controlId: string }): void;
   (e: 'update-geometry', data: any): void;
+  (e: 'control-drop', data: { groupId: string; controlId: string; relativePosition: any }): void;
 }
 
 const props = defineProps<Props>();
@@ -126,7 +128,12 @@ const wrapperClass = computed(() => {
 
   // 根据选择状态添加样式
   if (props.isSelected) {
-    classes.push('ring-2', 'ring-red-500', 'ring-inset', 'z-10');
+    classes.push('ring-2', 'ring-red-500', 'ring-inset');
+    // 🔧 选中时稍微提升层级，但仍然在普通控件之下
+    classes.push('z-5');
+  } else {
+    // 🔧 未选中时保持在最底层
+    classes.push('z-1');
   }
 
   return classes;
@@ -192,26 +199,94 @@ function handleResizeEnd({ id, rect, event }: { id: string; rect: any; event: an
 // 拖放处理（接收外部控件拖入）
 function handleDragOver(event: DragEvent) {
   event.preventDefault();
+  event.stopPropagation();
   if (event.dataTransfer) {
     event.dataTransfer.dropEffect = 'move';
   }
+  
+  // 添加视觉反馈
+  const groupElement = event.currentTarget as HTMLElement;
+  groupElement.classList.add('drop-target-active');
+}
+
+function handleDragLeave(event: DragEvent) {
+  event.preventDefault();
+  const groupElement = event.currentTarget as HTMLElement;
+  groupElement.classList.remove('drop-target-active');
 }
 
 function handleDrop(event: DragEvent) {
   event.preventDefault();
   event.stopPropagation();
   
+  const groupElement = event.currentTarget as HTMLElement;
+  groupElement.classList.remove('drop-target-active');
+  
   if (!event.dataTransfer) return;
 
   try {
-    const data = JSON.parse(event.dataTransfer.getData('application/json'));
-    console.log('🎯 组控件接收拖放:', data);
+    // 尝试解析拖拽数据
+    let dragData;
+    try {
+      dragData = JSON.parse(event.dataTransfer.getData('application/json'));
+    } catch {
+      // 如果不是JSON，可能是内部控件拖拽，从自定义数据类型获取
+      const controlId = event.dataTransfer.getData('text/control-id');
+      if (controlId) {
+        dragData = { controlId, isInternalDrag: true };
+      } else {
+        console.warn('无法解析拖拽数据');
+        return;
+      }
+    }
+
+    console.log('🎯 组控件接收拖放:', dragData);
     
-    // TODO: 这里需要实现控件入组逻辑
-    // 可能需要发送一个特殊的事件给上层处理
-    // emit('control-drop', { groupId: props.control.id, droppedData: data });
+    // 处理内部控件拖拽（控件间移动到组）
+    if (dragData.isInternalDrag && dragData.controlId) {
+      const groupRect = groupElement.getBoundingClientRect();
+      const groupContentArea = groupElement.querySelector('.group-content-area');
+      const contentRect = groupContentArea?.getBoundingClientRect() || groupRect;
+      
+      // 计算相对于组内容区域的位置
+      const relativeX = event.clientX - contentRect.left;
+      const relativeY = event.clientY - contentRect.top - 32; // 减去标题栏高度
+      
+      const relativePosition = {
+        left: `${Math.max(0, relativeX)}px`,
+        top: `${Math.max(0, relativeY)}px`,
+        anchor: 'top-left'
+      };
+      
+      console.log('✅ 计算入组位置:', {
+        控件ID: dragData.controlId,
+        目标组: props.control.id,
+        相对位置: relativePosition,
+        鼠标位置: { x: event.clientX, y: event.clientY },
+        组边界: { left: contentRect.left, top: contentRect.top },
+        调整后位置: { x: relativeX, y: relativeY - 32 }
+      });
+      
+      // 发送控件入组事件给上层处理
+      emit('control-drop', {
+        groupId: props.control.id,
+        controlId: dragData.controlId,
+        relativePosition
+      });
+      
+      return;
+    }
+    
+    // 处理工具箱拖拽（新建控件到组）
+    if (dragData.type) {
+      console.log('🎯 工具箱控件拖入组:', dragData.type);
+      // TODO: 实现工具箱控件直接拖入组的逻辑
+      // 这里需要创建新控件并添加到组内
+      // emit('toolbox-drop', { groupId: props.control.id, controlType: dragData.type, relativePosition });
+    }
+    
   } catch (error) {
-    console.warn('解析拖放数据失败:', error);
+    console.error('处理拖放失败:', error);
   }
 }
 
@@ -335,4 +410,27 @@ console.log('🏗️ GroupRenderer 初始化 (使用InteractWrapper):', {
 .z-5 { z-index: 5; }
 .z-10 { z-index: 10; }
 .z-15 { z-index: 15; }
+
+/* 拖拽视觉反馈 */
+.group-content-area.drop-target-active {
+  background-color: rgba(139, 69, 19, 0.1);
+  border: 2px dashed #8b4513;
+  border-radius: 4px;
+}
+
+.group-content-area.drop-target-active::after {
+  content: '拖放控件到此处';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(139, 69, 19, 0.9);
+  color: white;
+  padding: 8px 16px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: bold;
+  pointer-events: none;
+  z-index: 100;
+}
 </style> 

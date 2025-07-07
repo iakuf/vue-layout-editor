@@ -292,8 +292,53 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
-  if (elementRef.value && interact.isSet(elementRef.value)) {
-    interact(elementRef.value).unset();
+  try {
+    if (elementRef.value) {
+      // 🔧 方法1：尝试使用标准方式清理
+      if (interact && typeof interact.isSet === 'function') {
+        try {
+          if (interact.isSet(elementRef.value)) {
+            interact(elementRef.value).unset();
+            log('InteractWrapper标准清理成功');
+            return;
+          }
+        } catch (isSetError) {
+          console.warn('interact.isSet检查失败:', isSetError);
+        }
+      }
+      
+      // 🔧 方法2：尝试直接清理
+      try {
+        const instance = interact(elementRef.value);
+        if (instance && typeof instance.unset === 'function') {
+          instance.unset();
+          log('InteractWrapper直接清理成功');
+          return;
+        }
+      } catch (directError) {
+        console.warn('直接清理失败:', directError);
+      }
+      
+      // 🔧 方法3：尝试手动移除事件监听器
+      try {
+        const element = elementRef.value;
+        element.removeEventListener('pointerdown', () => {});
+        element.removeEventListener('pointermove', () => {});
+        element.removeEventListener('pointerup', () => {});
+        element.removeEventListener('mousedown', () => {});
+        element.removeEventListener('mousemove', () => {});
+        element.removeEventListener('mouseup', () => {});
+        element.removeEventListener('touchstart', () => {});
+        element.removeEventListener('touchmove', () => {});
+        element.removeEventListener('touchend', () => {});
+        log('InteractWrapper手动清理完成');
+      } catch (manualError) {
+        console.warn('手动清理失败:', manualError);
+      }
+    }
+  } catch (error) {
+    // 静默处理所有清理错误，避免影响组件卸载
+    console.warn('InteractWrapper清理过程中的错误已忽略:', error);
   }
 });
 

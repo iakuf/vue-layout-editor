@@ -68,13 +68,17 @@ const wrapperClass = computed(() => {
 
   // 根据条件添加类名
   if (props.isSelected) {
-    classes.push('ring-2', 'ring-red-500', 'ring-inset', 'z-10');
+    classes.push('ring-2', 'ring-red-500', 'ring-inset');
+    // 🔧 选中时提升层级，但仍在组控件之上
+    classes.push('z-20');
     // 只有当没有resize handles时才显示resize cursor
     if (!props.isPrimarySelected) {
       classes.push('cursor-move');
     }
   } else {
     classes.push('cursor-move');
+    // 🔧 普通控件的默认层级应该在组控件之上
+    classes.push('z-10');
   }
 
   classes.push('touch-none');
@@ -87,6 +91,8 @@ const wrapperClass = computed(() => {
 
   return classes;
 });
+
+
 
 // 事件处理
 function handleSelect(id: string) {

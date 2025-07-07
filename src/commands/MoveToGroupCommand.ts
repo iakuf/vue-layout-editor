@@ -107,13 +107,21 @@ export class MoveToGroupCommand implements Command {
     if (oldParent && oldIndex >= 0) {
       const control = oldParent.splice(oldIndex, 1)[0];
       
-      // 更新控件位置为相对于组的位置
+      // 🔧 保存控件的原始尺寸
+      const originalSize = { ...control.size };
+      
+      // 🔧 只更新控件位置为相对于组的位置，保持原始尺寸
       control.position = newPosition;
+      control.size = originalSize; // 保持原始尺寸不变
       
       // 添加到目标组
       targetGroup.controls.push(control);
       
-      console.log(`✅ 控件 ${control.label} 已移动到组 ${targetGroup.label} 内 (组内共 ${targetGroup.controls.length} 个控件)`);
+      console.log(`✅ 控件 ${control.label} 已移动到组 ${targetGroup.label} 内`, {
+        组内控件数: targetGroup.controls.length,
+        新位置: control.position,
+        保持尺寸: control.size
+      });
     }
   }
 
