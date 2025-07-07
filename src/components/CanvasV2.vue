@@ -18,7 +18,6 @@
         :is-primary-selected="selectedControlIds[0] === control.id"
         :selected-control-ids="selectedControlIds"
         @select="handleSelect"
-        @drag-start="handleDragStart"
         @update-geometry="handleGeometryUpdate"
       />
     </div>
@@ -29,15 +28,16 @@
 import { ref, computed, nextTick } from 'vue';
 import type { Control } from '../types';
 import { layout, executeCommand, selectedControlIds } from '../store';
-import { ControlTreeManager } from '../utils/ControlTreeManager';
-import { DragStateManager } from '../utils/DragStateManager';
 import { createControl } from '../factories/controlFactory';
 import { AddControlCommand } from '../commands/AddControlCommand';
-import { BatchMoveCommand } from '../commands/BatchMoveCommand';
-import { MoveToGroupCommand } from '../commands/MoveToGroupCommand';
+// todo: 未来没用到都是需要先删除
+// import { ControlTreeManager } from '../utils/ControlTreeManager';
+// import { DragStateManager } from '../utils/DragStateManager';
+// import { BatchMoveCommand } from '../commands/BatchMoveCommand';
+// import { MoveToGroupCommand } from '../commands/MoveToGroupCommand';
 import { ResizeControlCommand } from '../commands/ResizeControlCommand';
 import GroupRenderer from './GroupRenderer.vue';
-import ControlRenderer from './ControlRenderer.vue';
+import ControlRenderer from './ControlRendererV3.vue';
 // 编辑器内部统一使用 px 单位，只在导入导出时转换
 
 const canvasRef = ref<HTMLElement>();
@@ -59,305 +59,41 @@ function handleCanvasClick() {
   selectedControlIds.value = [];
 }
 
-// 工具函数：获取控件层级和类型信息
-function getControlLevelInfo(controlId: string) {
-  const location = ControlTreeManager.findControl(controlId);
-  if (!location) return { isTopGroup: false, isGroupChild: false, parent: null, level: -1, control: null };
-
-  const isTopGroup = location.parent === null && location.control.type === 'group';
-  const isGroupChild = location.parent && location.parent.type === 'group';
-
-  return {
-    isTopGroup,
-    isGroupChild,
-    parent: location.parent,
-    level: location.level,
-    control: location.control
-  };
-}
-
-// 处理拖拽开始
-function handleDragStart({ controlId }: { controlId: string }) {
-  console.log('🚀 拖拽开始处理:', controlId);
-  const info = getControlLevelInfo(controlId);
-  console.log('控件层级信息:', info);
-  
-  const session = DragStateManager.startDragSession(controlId, selectedControlIds.value);
-  if (!session) {
-    console.error('❌ 无法开始拖拽会话');
-    return;
-  }
-  
-  // 更新选中状态
-  selectedControlIds.value = session.selectedControlIds;
-}
-
 // 处理几何更新（拖拽或缩放）
-function handleGeometryUpdate({ id, dx, dy, newRect, isDrag }: { 
+// 找到 handleGeometryUpdate 函数并替换
+function handleGeometryUpdate({ id, newRect, isDrag }: { 
   id: string; 
-  dx?: number; 
-  dy?: number; 
-  newRect?: any; 
+  newRect: any; 
   isDrag: boolean;
 }) {
-  console.log('🔄 几何更新:', { id, isDrag, dx, dy, newRect });
-  
+  console.log(`🔄 几何更新 (${isDrag ? '拖拽' : '缩放'}):`, { id, newRect });
   if (!canvasRef.value) return;
-  
-  if (isDrag && dx !== undefined && dy !== undefined) {
-    handleDragUpdate(id, dx, dy);
-  } else if (!isDrag && newRect) {
-    handleResizeUpdate(id, newRect);
-  }
-}
-
-// 处理拖拽更新
-function handleDragUpdate(draggedControlId: string, dx: number, dy: number) {
-  if (!canvasRef.value) return;
-  
-  const session = DragStateManager.getCurrentSession();
-  if (!session) {
-    console.error('❌ 没有活动的拖拽会话');
-    return;
-  }
-  
-  // 计算拖拽后的鼠标位置
-  const mousePosition = calculateMousePosition(draggedControlId, dx, dy);
-  if (!mousePosition) return;
-  
-  // 检测拖拽入组
-  const dropTarget = DragStateManager.detectDropTarget(
-    mousePosition.x, 
-    mousePosition.y, 
-    canvasRef.value
-  );
-  
-  if (dropTarget) {
-    console.log('🎯 检测到拖拽入组，准备移动到组');
-    handleMoveToGroup(draggedControlId, dropTarget);
-  } else {
-    console.log('📦 执行普通拖拽移动');
-    handleNormalDrag(dx, dy);
-  }
-}
-
-// 计算鼠标位置
-function calculateMousePosition(controlId: string, dx: number, dy: number): { x: number; y: number } | null {
-  if (!canvasRef.value) return null;
-  
-  const session = DragStateManager.getCurrentSession();
-  if (!session) return null;
-  
-  const startPosition = session.startPositions.get(controlId);
-  if (!startPosition) return null;
-  
-  const canvasRect = canvasRef.value.getBoundingClientRect();
-  const newPosition = calculateNewPosition(dx, dy, startPosition, canvasRect);
-  
-  // 解析位置为坐标
-  return parsePositionToCoordinates(newPosition, canvasRect);
-}
-
-// 计算新位置
-function calculateNewPosition(dx: number, dy: number, startPosition: any, canvasRect: DOMRect): any {
-  const position: any = { anchor: startPosition.anchor };
-  
-  // 解析锚点
-  let anchorX: string, anchorY: string;
-  if (startPosition.anchor === 'center') {
-    anchorX = 'center';
-    anchorY = 'middle';
-  } else {
-    const parts = startPosition.anchor.split('-');
-    anchorY = parts[0];
-    anchorX = parts[1];
-  }
-  
-  // 计算水平位置
-  if (anchorX === 'center') {
-    const currentLeft = startPosition.left || '50%';
-    if (currentLeft.includes('calc')) {
-      const match = currentLeft.match(/calc\(50% \+ (.+)px\)/);
-      const currentOffset = match ? parseFloat(match[1]) : 0;
-      const newOffset = currentOffset + dx;
-      position.left = newOffset === 0 ? '50%' : `calc(50% + ${newOffset}px)`;
-    } else if (currentLeft === '50%') {
-      position.left = `calc(50% + ${dx}px)`;
-    }
-  } else if (anchorX === 'left' && startPosition.left !== undefined) {
-    const currentLeft = parseFloat(startPosition.left) || 0;
-    position.left = `${Math.max(0, currentLeft + dx)}px`;
-  } else if (anchorX === 'right' && startPosition.right !== undefined) {
-    const currentRight = parseFloat(startPosition.right) || 0;
-    position.right = `${Math.max(0, currentRight - dx)}px`;
-  }
-  
-  // 计算垂直位置
-  if (anchorY === 'middle') {
-    const currentTop = startPosition.top || '50%';
-    if (currentTop.includes('calc')) {
-      const match = currentTop.match(/calc\(50% \+ (.+)px\)/);
-      const currentOffset = match ? parseFloat(match[1]) : 0;
-      const newOffset = currentOffset + dy;
-      position.top = newOffset === 0 ? '50%' : `calc(50% + ${newOffset}px)`;
-    } else if (currentTop === '50%') {
-      position.top = `calc(50% + ${dy}px)`;
-    }
-  } else if (anchorY === 'top' && startPosition.top !== undefined) {
-    const currentTop = parseFloat(startPosition.top) || 0;
-    position.top = `${Math.max(0, currentTop + dy)}px`;
-  } else if (anchorY === 'bottom' && startPosition.bottom !== undefined) {
-    const currentBottom = parseFloat(startPosition.bottom) || 0;
-    position.bottom = `${Math.max(0, currentBottom - dy)}px`;
-  }
-  
-  return position;
-}
-
-// 解析位置为坐标
-function parsePositionToCoordinates(position: any, canvasRect: DOMRect): { x: number; y: number } {
-  let x = 0;
-  let y = 0;
-  
-  // 解析水平位置
-  if (position.left) {
-    if (typeof position.left === 'string') {
-      if (position.left.includes('calc')) {
-        const match = position.left.match(/calc\(50% \+ (.+)px\)/);
-        const offset = match ? parseFloat(match[1]) : 0;
-        x = canvasRect.width / 2 + offset;
-      } else if (position.left.includes('%')) {
-        const percent = parseFloat(position.left);
-        x = canvasRect.width * percent / 100;
-      } else {
-        x = parseFloat(position.left);
-      }
-    }
-  } else if (position.right) {
-    const rightValue = parseFloat(position.right);
-    x = canvasRect.width - rightValue;
-  }
-  
-  // 解析垂直位置
-  if (position.top) {
-    if (typeof position.top === 'string') {
-      if (position.top.includes('calc')) {
-        const match = position.top.match(/calc\(50% \+ (.+)px\)/);
-        const offset = match ? parseFloat(match[1]) : 0;
-        y = canvasRect.height / 2 + offset;
-      } else if (position.top.includes('%')) {
-        const percent = parseFloat(position.top);
-        y = canvasRect.height * percent / 100;
-      } else {
-        y = parseFloat(position.top);
-      }
-    }
-  } else if (position.bottom) {
-    const bottomValue = parseFloat(position.bottom);
-    y = canvasRect.height - bottomValue;
-  }
-  
-  return { x, y };
-}
-
-// 处理移动到组
-function handleMoveToGroup(controlId: string, dropTarget: any) {
-  // 检查控件是否已经在目标组内
-  const location = ControlTreeManager.findControl(controlId);
-  if (!location) return;
-  
-  if (location.parent && location.parent.id === dropTarget.targetGroupId) {
-    console.log('⚠️ 控件已在目标组内，跳过移动');
-    return;
-  }
-  
-  nextTick(() => {
-    try {
-      const command = new MoveToGroupCommand(
-        controlId, 
-        dropTarget.targetGroupId, 
-        dropTarget.relativePosition
-      );
-      executeCommand(command);
-      
-      // 更新选中状态
-      selectedControlIds.value = [dropTarget.targetGroupId, controlId];
-      
-      console.log('✅ 控件已成功移入组');
-    } catch (error) {
-      console.error('❌ 移入组失败:', error);
-    }
-  });
-}
-
-
-
-// 修改handleNormalDrag，编辑器内部统一使用px单位
-function handleNormalDrag(dx: number, dy: number) {
-  const session = DragStateManager.getCurrentSession();
-  if (!session || !canvasRef.value) return;
-
-  const moves: any[] = [];
-
-  session.selectedControlIds.forEach(controlId => {
-    const location = ControlTreeManager.findControl(controlId);
-    const startPosition = session.startPositions.get(controlId);
-
-    if (location && startPosition) {
-      // 计算新位置（保持px单位）
-      let newLeft = startPosition.left;
-      let newTop = startPosition.top;
-      
-      if (startPosition.left && typeof startPosition.left === 'string') {
-        const currentLeft = parseFloat(startPosition.left);
-        newLeft = `${currentLeft + dx}px`;
-      }
-      if (startPosition.top && typeof startPosition.top === 'string') {
-        const currentTop = parseFloat(startPosition.top);
-        newTop = `${currentTop + dy}px`;
-      }
-
-      const newPosition = {
-        ...startPosition,
-        left: newLeft,
-        top: newTop
-      };
-
-      moves.push({
-        controlId,
-        oldPosition: startPosition,
-        newPosition: newPosition
-      });
-    }
-  });
-
-  if (moves.length > 0) {
-    const command = new BatchMoveCommand(moves);
-    executeCommand(command);
-  }
-
-  // 结束拖拽会话
-  DragStateManager.endDragSession();
-}
-
-// 修改handleResizeUpdate，写入layout前做单位转换
-function handleResizeUpdate(controlId: string, newRect: any) {
-  console.log('🔄 缩放更新:', { controlId, newRect });
 
   try {
-    // 直接传递 px 数值给 ResizeControlCommand，让它内部处理单位转换
-    const command = new ResizeControlCommand(controlId, {
+    // ✨ 核心架构修复 ✨
+    // 在这里，我们不仅更新位置和尺寸，还要将锚点标准化为 'top-left'。
+    // 这可以确保 interact.js 返回的绝对像素位置得到正确应用，
+    // 消除了因 'bottom-right' 等不同锚点造成的布局计算冲突。
+    const command = new ResizeControlCommand(id, {
+      // 尺寸更新
+      width: newRect.width,
+      height: newRect.height,
+      
+      // 位置更新
       left: newRect.left,
       top: newRect.top,
-      width: newRect.width,
-      height: newRect.height
+      
+      // 锚点标准化
+      anchor: 'top-left'
     });
+
     executeCommand(command);
-    console.log('✅ 缩放命令执行成功');
+    console.log(`✅ ${isDrag ? '拖拽' : '缩放'}命令执行成功`);
   } catch (error) {
-    console.error('❌ 缩放命令执行失败:', error);
+    console.error(`❌ ${isDrag ? '拖拽' : '缩放'}命令执行失败:`, error);
   }
 }
+
 
 // 处理拖拽悬停事件
 function handleDragOver(event: DragEvent) {
@@ -409,4 +145,17 @@ function handleDrop(event: DragEvent) {
 
 <style scoped>
 /* Canvas样式 */
+#layout-canvas {
+  /* 确保容器稳定，防止子元素interact时影响布局 */
+  position: relative;
+  contain: layout style paint; /* CSS Containment：隔离布局计算 */
+  transform: translateZ(0); /* 强制创建新的层叠上下文 */
+  will-change: auto; /* 避免不必要的合成层 */
+}
+
+/* 确保所有子元素的绝对定位不影响容器和兄弟元素 */
+#layout-canvas > * {
+  position: absolute;
+  transform-style: preserve-3d; /* 保持3D变换空间独立 */
+}
 </style> 

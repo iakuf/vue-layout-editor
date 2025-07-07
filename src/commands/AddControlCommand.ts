@@ -13,10 +13,17 @@ export class AddControlCommand implements Command {
   }
 
   public execute(): void {
-    // 暂时简化为只操作默认的 controlSet
+    // 确保 targetSet 存在，如果不存在则创建
+    if (!layout.controlSets[layout.initialSet]) {
+      layout.controlSets[layout.initialSet] = [];
+    }
+    
     const targetSet = layout.controlSets[layout.initialSet];
     if (targetSet) {
       targetSet.push(this.newControl);
+      console.log('✅ 控件添加成功:', { id: this.newControl.id, type: this.newControl.type });
+    } else {
+      console.error('❌ 无法添加控件：targetSet 不存在');
     }
   }
 
@@ -26,6 +33,7 @@ export class AddControlCommand implements Command {
       const index = targetSet.findIndex(c => c.id === this.newControl.id);
       if (index > -1) {
         targetSet.splice(index, 1);
+        console.log('↩️ 控件删除成功:', { id: this.newControl.id });
       }
     }
   }

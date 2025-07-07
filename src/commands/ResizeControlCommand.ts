@@ -5,19 +5,22 @@ import type { Control } from '../types';
 
 export class ResizeControlCommand implements Command {
   private controlId: string;
-  private newRect: { left: number; top: number; width: number; height: number };
+  private newRect: { left: number; top: number; width: number; height: number; anchor: string };
   private oldPosition: any;
   private oldSize: any;
+  private oldAnchor: string | undefined; // 可选：为了撤销更完美，保存旧 anchor
 
-  constructor(controlId: string, newRect: { left: number; top: number; width: number; height: number }) {
+  constructor(controlId: string, newRect: { left: number; top: number; width: number; height: number; anchor: string }) {
     this.controlId = controlId;
     this.newRect = newRect;
 
-    // 在构造时就获取旧值
     const control = this.findControl();
     if (control) {
+      // 深度克隆，防止引用问题
       this.oldPosition = JSON.parse(JSON.stringify(control.position));
       this.oldSize = JSON.parse(JSON.stringify(control.size));
+      // ✨ 3. 同时保存旧的 anchor 值
+      this.oldAnchor = control.position.anchor;
     }
   }
 
@@ -42,75 +45,33 @@ export class ResizeControlCommand implements Command {
     return null;
   }
 
-
-
-  // 编辑器内部统一使用 px 单位
-  private convertPositionAndSize() {
-    let position: any = { anchor: 'top-left' };
-    let size: any = {};
-
-    // 统一使用 px 单位
-    position.left = `${this.newRect.left}px`;
-    position.top = `${this.newRect.top}px`;
-    size.width = `${this.newRect.width}px`;
-    size.height = `${this.newRect.height}px`;
-    
-    return { position, size };
-  }
-
+  // 找到 execute 方法并将其完全替换为以下内容：
   public execute(): void {
     const control = this.findControl();
     if (!control) return;
-
-    console.log('🔧 执行缩放命令:', {
-      控件: control.label,
-      旧位置: this.oldPosition,
-      旧尺寸: this.oldSize,
+  
+    console.log('🔧 执行 resize/move 命令 (新)', {
+      控件ID: this.controlId,
       新矩形: this.newRect
     });
-
-    // 根据控件层级转换单位
-    const { position, size } = this.convertPositionAndSize();
-
-    // 更新位置
-    const anchor = control.position.anchor || 'top-left';
-    const parts = anchor.split('-');
-    const anchorY = parts[0];
-    const anchorX = parts[1];
-
-    // 更新水平位置
-    if (anchorX === 'left') {
-      control.position.left = position.left;
-    } else if (anchorX === 'right') {
-      // 对于 right 定位，需要计算 right 值
-      const canvasWidth = 812;
-      const rightPx = canvasWidth - this.newRect.left - this.newRect.width;
-      control.position.right = `${rightPx}px`;
-    } else if (anchorX === 'center') {
-      const canvasWidth = 812;
-      const centerOffset = this.newRect.left + this.newRect.width / 2 - canvasWidth / 2;
-      control.position.left = centerOffset === 0 ? '50%' : `calc(50% + ${centerOffset}px)`;
-    }
-
-    // 更新垂直位置
-    if (anchorY === 'top') {
-      control.position.top = position.top;
-    } else if (anchorY === 'bottom') {
-      // 对于 bottom 定位，需要计算 bottom 值
-      const canvasHeight = 375;
-      const bottomPx = canvasHeight - this.newRect.top - this.newRect.height;
-      control.position.bottom = `${bottomPx}px`;
-    } else if (anchorY === 'middle') {
-      const canvasHeight = 375;
-      const centerOffset = this.newRect.top + this.newRect.height / 2 - canvasHeight / 2;
-      control.position.top = centerOffset === 0 ? '50%' : `calc(50% + ${centerOffset}px)`;
-    }
-
-    // 更新尺寸
-    control.size.width = size.width;
-    control.size.height = size.height;
-
-    console.log('✅ 缩放命令执行完成:', {
+  
+    // 直接修改响应式对象的属性，而不是替换整个对象
+    // 1. 标准化锚点
+    control.position.anchor = this.newRect.anchor;
+  
+    // 2. 设置新的绝对定位属性
+    control.position.left = `${this.newRect.left}px`;
+    control.position.top = `${this.newRect.top}px`;
+  
+    // 3. ✨ 最关键的修复：显式删除所有可能冲突的旧定位属性 ✨
+    delete control.position.right;
+    delete control.position.bottom;
+  
+    // 4. 更新尺寸
+    control.size.width = `${this.newRect.width}px`;
+    control.size.height = `${this.newRect.height}px`;
+  
+    console.log('✅ 命令执行完成, 控件状态已净化:', {
       新位置: control.position,
       新尺寸: control.size
     });
@@ -120,14 +81,18 @@ export class ResizeControlCommand implements Command {
     const control = this.findControl();
     if (!control) return;
 
-    console.log('↩️ 撤销缩放命令:', {
-      控件: control.label,
-      恢复位置: this.oldPosition,
-      恢复尺寸: this.oldSize
+    console.log('↩️ 撤销命令:', {
+      控件ID: this.controlId,
     });
 
-    // 恢复位置和尺寸
-    control.position = JSON.parse(JSON.stringify(this.oldPosition));
-    control.size = JSON.parse(JSON.stringify(this.oldSize));
+    // 恢复旧的 position 和 size 对象
+    control.position = this.oldPosition;
+    control.size = this.oldSize;
+
+    // 如果旧的 anchor 也保存了，可以恢复它
+    // 这确保了撤销可以完美回到之前的状态，包括非 'top-left' 的锚点
+    if (this.oldAnchor) {
+      control.position.anchor = this.oldAnchor;
+    }
   }
 } 

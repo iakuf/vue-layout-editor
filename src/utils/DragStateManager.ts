@@ -30,11 +30,12 @@ export class DragStateManager {
       return null;
     }
 
+    // 只移动当前拖拽的控件，而不是所有选中的控件
+    let finalSelectedIds = [draggedControlId];
+    
     // 如果拖拽的是组控件，确保只移动组本身，不包括子控件
-    let finalSelectedIds = selectedControlIds;
     if (draggedLocation.control.type === 'group') {
       console.log('🎯 拖拽组控件 - 只移动组本身，排除子控件');
-      finalSelectedIds = [draggedControlId];
       
       // 排除所有子控件
       const descendants = ControlTreeManager.getAllDescendants(draggedControlId);
